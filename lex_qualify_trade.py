@@ -65,7 +65,29 @@ def handle_error( msg ):
     logger.error(response)
     return response
     
+
+
+
+##
+##
+##
+##
+##
+def lambda_handler(event, context):
     
+    try:
+  
+        # Extract the trade_name slot value from the event
+        trade_name = event['sessionState']['intent']['slots']['trade_name']['value']['originalValue']
+               
+        return qualifyTrade( event, trade_name.casefold() )
+
+    except Exception as e:
+        return createResponse( trade_name or "unrecognized", handle_error(str(e)), FAILURE )
+
+
+
+
     
     
 ##
@@ -175,25 +197,6 @@ def qualifyTrade_failure( trade_name ):
 
 
 
-
-
-
-##
-##
-##
-##
-##
-def lambda_handler(event, context):
-    
-    try:
-  
-        # Extract the trade_name slot value from the event
-        trade_name = event['sessionState']['intent']['slots']['trade_name']['value']['originalValue']
-               
-        return qualifyTrade( event, trade_name.casefold() )
-
-    except Exception as e:
-        return createResponse( trade_name or "unrecognized", handle_error(str(e)), FAILURE )
 
 
 

@@ -9,19 +9,71 @@
 ##
 
 import json
+import json.encoder
 import boto3
+
+import logging
+
+
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
+
+
+
+
+##
+##
+def handle_error( the_error ):
+
+    err_msg = str( the_error )
+    logger.error( err_msg )
+    
+    msg = f"Error fulfilling your request [Fallback Intent]: {err_msg}.  Help improve the Leedz by sending us a bug report: theleedz.com@gmail.com" 
+    return msg
+
+
 
 
 
 ##   
 ##    AWS Lambda handler function.
 ##
+##    Handle the FallbackIntent by querying the Bedrock model with the user's input.
 ##
+##    Args:
+##    - event (dict): AWS Lambda event containing information about the Lex session.
+##
+##    Returns:
+##    - dict: Lex response including the Bedrock model's completion.
 ##
 def lambda_handler(event, context):
-        return handle_fallback(event)
+
+    try:
+          
+        bedrock = boto3.client(
+            service_name="bedrock-runtime",
+            region_name="us-west-2"
+        )
+
+        question = event["inputTranscript"]
+
+        result = query_action(question, bedrock)
+
+        from_bedrock = result['completion']
+        
+        response = createResponse(event, from_bedrock, 1)
+        logger.info( response )
+        
+        return response
+
     
-    
+    except Exception as e:
+        response = createResponse(event, handle_error(e), None)
+        return response
+
 
 
 
@@ -37,8 +89,6 @@ def lambda_handler(event, context):
 ##    Returns:
 ##    - dict: Result from the Bedrock model.
 ##
-
-
 
 
 def query_action(question, bedrock):
@@ -66,46 +116,27 @@ def query_action(question, bedrock):
         
     response = bedrock.invoke_model(body=body, modelId=modelId, accept=accept, contentType=contentType)
     result = json.loads(response.get("body").read())
-    print(result)
+
     return result
 
 
 
 
-##
-## Create and return a Bedrock Runtime client using boto3.
-##
-## Returns:
-## boto3.client: Bedrock Runtime client.
-
-def create_bedrock_client():
-
-    bedrock = boto3.client(
-        service_name="bedrock-runtime",
-        region_name="us-west-2"
-    )
-    return bedrock
 
 
 
 
 
 ##
-##    Handle the FallbackIntent by querying the Bedrock model with the user's input.
+## FORMAT THE RESPONSE JSON
+## https://docs.aws.amazon.com/lexv2/latest/dg/lambda-response-format.html
 ##
-##    Args:
-##    - event (dict): AWS Lambda event containing information about the Lex session.
-##
-##    Returns:
-##    - dict: Lex response including the Bedrock model's completion.
-##
-def handle_fallback(event):
-
+def createResponse( event, msg, success) :
+    
+    the_state = "Fulfilled" if success else "Failed"
+    
     slots = event["sessionState"]["intent"]["slots"]
     intent = event["sessionState"]["intent"]["name"]
-    bedrock = create_bedrock_client()
-    question = event["inputTranscript"]
-    result = query_action(question, bedrock)
     session_attributes = event["sessionState"]["sessionAttributes"]
 
     response = {
@@ -113,15 +144,14 @@ def handle_fallback(event):
             "dialogAction": {
                 "type": "Close",
             },
-            "intent": {"name": intent, "slots": slots, "state": "Fulfilled"},
+            "intent": {"name": intent, "slots": slots, "state": the_state},
             "sessionAttributes": session_attributes,
         },
         "messages": [
-            {"contentType": "PlainText", "content": result["completion"]},
+            {"contentType": "PlainText", "content": msg },
         ],
     }
-    return response
-
-
-
-
+    
+    the_json = json.dumps(response)
+    return the_json
+    
