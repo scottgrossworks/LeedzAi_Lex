@@ -1,5 +1,5 @@
 ##
-## QUALIFIES trade_name
+## QUALIFIES tradename
 ## corresponds to a "Qualification" intent, where the bot assesses the prospect's needs and evaluates their suitability for the platform 
 ## Drive --> Close ( show user how to join / log-in )
 ##
@@ -18,8 +18,7 @@ import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-SUCCESS = 1
-FAILURE = None
+
 
 
 #
@@ -68,37 +67,23 @@ def handle_error( msg ):
 
 
 
-##
-##
-##
-##
-##
-def lambda_handler(event, context):
-    
-    try:
-  
-        # Extract the trade_name slot value from the event
-        trade_name = event['sessionState']['intent']['slots']['trade_name']['value']['originalValue']
-               
-        return qualifyTrade( event, trade_name.casefold() )
-
-    except Exception as e:
-        return createResponse( trade_name or "unrecognized", handle_error(str(e)), FAILURE )
-
-
-
-
-    
     
 ##
 ## Qualify Trade
 ##
 ## User submits their trade_name
 ## use trades data to tailor response
-## 
-def qualifyTrade( event, trade_name ) :
+##
+def lambda_handler(event, context):
+    
+    SUCCESS = 1
+    FAILURE = None
+    trade_name = None
     
     try:
+  
+        # Extract the trade_name slot value from the event
+        trade_name = event['sessionState']['intent']['slots']['trade_name']['value']['originalValue']
         
         ## CALL getTrades()
         ##
@@ -118,17 +103,24 @@ def qualifyTrade( event, trade_name ) :
             trade = each_trade['sk']
             num_leedz = each_trade['nl']
       
-            # SUCCESS!
+            # SUCCESS !
             if (trade == trade_name):
-                return createResponse( trade_name, qualifyTrade_success( trade_name, num_leedz ), SUCCESS )
+                return createResponse( event, qualifyTrade_success( trade_name, num_leedz ), SUCCESS )
         
 
+        # FAILURE !
         # we got to the end of the list without finding a match
-        return createResponse( trade_name, qualifyTrade_failure( trade_name ), FAILURE )
+        return createResponse( event, qualifyTrade_failure( trade_name ), FAILURE )
+
+
 
     except Exception as e:
-        logger.error(f"Error in qualifyTrade( {trade_name} ): {e}")
-        raise ClientError("Could not query trades data.")
+        err_str = str(e)
+        logger.error(f"Error in qualifyTrade( {trade_name} ): " + err_str)
+        return createResponse( event, handle_error( err_str ), FAILURE )
+
+
+
     
     
     
@@ -139,12 +131,11 @@ def qualifyTrade( event, trade_name ) :
 ##
 def qualifyTrade_success( trade_name, num_leedz ):
 
-    message = f"{trade_name} is on The Leedz!  There are currently {num_leedz} leedz posted for this trade."
+    message = f"The {trade_name} business is on The Leedz!  There have been {num_leedz} leedz posted for this trade."
     
-    ## call getStats() for more info
-    ##    
-    try :
-    
+    try :    
+        ## call getStats() for more info
+        ##    
         lambda_function = boto3.client('lambda')
         response = lambda_function.invoke( FunctionName='getStats',
                     InvocationType='RequestResponse',
@@ -152,8 +143,6 @@ def qualifyTrade_success( trade_name, num_leedz ):
         
         payload = json.loads( response['Payload'].read() )
         stats = json.loads( payload['body'] )
-    
-    
     
         posted = None
         # last leed posted
@@ -174,13 +163,13 @@ def qualifyTrade_success( trade_name, num_leedz ):
             sold = f"  In fact, the last {trade_name} leed was sold on {date_bought} for ${price_bought} in {zip_bought}."  
             message = message + sold
         
+            
+        return message
+    
         
     except Exception as e:
         logger.error(f"Error in qualifyTrade( {trade_name} ): {e}")
-        # DO NOT raise Error -- just bail
-    
-    
-    return message
+        raise
     
     
     
@@ -195,34 +184,26 @@ def qualifyTrade_failure( trade_name ):
 
 
 
+##
+##
+##
+def createResponse(event, msg, fulfilled):
 
-
-
-
-
-
-
-
-def createResponse(trade_name, msg, fulfilled):
+    slots = event["sessionState"]["intent"]["slots"]
+    intent = event["sessionState"]["intent"]["name"]
+    session_attributes = event['sessionState'].get('sessionAttributes', {})
 
     response = {
         "sessionState": {
             "dialogAction": {
-                "type": "Delegate"
+                "type": "Close"
             },
             "intent": {
-                "name": "Qualify",
-                "slots": {
-                    "trade_name": {
-                        "value": {
-                            "originalValue": trade_name,
-                            "interpretedValue": trade_name if fulfilled else "",
-                            "resolvedValues": [trade_name] if fulfilled else []
-                        }
-                    }
-                }
+                "name": intent,
+                "slots": slots,
+                "state": "Fulfilled" if fulfilled else "Failed"
             },
-            "sessionAttributes": {}
+            "sessionAttributes": session_attributes,
         },
         "messages": [
             {
@@ -232,9 +213,7 @@ def createResponse(trade_name, msg, fulfilled):
         ]
     }
     
+    
+    logger.info(response)
+    
     return response
-
- 
-			
-			
- 

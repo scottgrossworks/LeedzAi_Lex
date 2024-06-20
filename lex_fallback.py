@@ -65,13 +65,15 @@ def lambda_handler(event, context):
         from_bedrock = result['completion']
         
         response = createResponse(event, from_bedrock, 1)
+        
         logger.info( response )
         
         return response
 
     
-    except Exception as e:
-        response = createResponse(event, handle_error(e), None)
+    except Exception as err:
+        err_str = handle_error(err)
+        response = createResponse(event, err_str, None)
         return response
 
 
@@ -137,7 +139,7 @@ def createResponse( event, msg, success) :
     
     slots = event["sessionState"]["intent"]["slots"]
     intent = event["sessionState"]["intent"]["name"]
-    session_attributes = event["sessionState"]["sessionAttributes"]
+    session_attributes = event['sessionState'].get('sessionAttributes', {})
 
     response = {
         "sessionState": {
@@ -148,10 +150,10 @@ def createResponse( event, msg, success) :
             "sessionAttributes": session_attributes,
         },
         "messages": [
-            {"contentType": "PlainText", "content": msg },
+            {"contentType": "PlainText", 
+            "content": msg
+            },
         ],
     }
     
-    the_json = json.dumps(response)
-    return the_json
-    
+    return response

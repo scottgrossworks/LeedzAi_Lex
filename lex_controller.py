@@ -22,8 +22,6 @@ logger.setLevel(logging.INFO)
     
 
     
-
-    
 ##
 ## Extract the intent name from the event object
 ## throw error if not found
@@ -49,7 +47,7 @@ def get_current_intent( event ):
 
 
 ##
-## handle_error has to format the response correctly
+## return properly formtted error response with Intent resolution: Failed 
 ##
 def handle_error( event, err_msg ):
 
@@ -57,7 +55,7 @@ def handle_error( event, err_msg ):
 
     slots = event["sessionState"]["intent"]["slots"]
     intent = event["sessionState"]["intent"]["name"]
-    session_attributes = event["sessionState"]["sessionAttributes"]
+    session_attributes = event['sessionState'].get('sessionAttributes', {})
 
     response = {
         "sessionState": {
@@ -68,14 +66,13 @@ def handle_error( event, err_msg ):
             "sessionAttributes": session_attributes,
         },
         "messages": [
-            {"contentType": "PlainText", "content": err_msg },
+            {"contentType": "PlainText", 
+            "content": err_msg
+            },
         ],
     }
     
-    the_json = json.dumps(response)
-    return the_json
-
-
+    return response
 
 
 
@@ -96,16 +93,15 @@ def lambda_handler(event, context):
         
         lambda_client = boto3.client('lambda')
 
-        logger.info("INTENT: " + intent)
                 
         match (intent) :
         
             ## QUALIFY TRADE
             ##
-            case "QualifyTrade" :
+            case "Qualify_tradename" :
         
                 response = lambda_client.invoke(
-                    FunctionName='lex_qualify_trade',
+                    FunctionName='lex_qualify_tradename',
                     InvocationType='RequestResponse',
                     Payload=json.dumps(event)
                 )
@@ -119,14 +115,18 @@ def lambda_handler(event, context):
                     InvocationType='RequestResponse',
                     Payload=json.dumps(event)
                 )
-                
+
+
+        the_json = json.loads( response['Payload'].read() )
+        logger.info( the_json )
+        return the_json
+    
+    
     
     except Exception as e:
         err_msg = str(e)
         response = handle_error(event, err_msg)
-        
+        the_json = json.loads( response )
+        return the_json
     
-    ## stream formatted response from the Payload of the function return data
-    ## 
-    return json.loads(response['Payload'].read())
 
